@@ -6,7 +6,9 @@ from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
+from pptx.enum.shapes import MSO_SHAPE
 from dotenv import load_dotenv
+
 app = Flask(__name__)
 
 load_dotenv()
@@ -31,19 +33,32 @@ def generate_ppt():
         'Authorization': f'Bearer {OPENAI_API_KEY}'
     }
     prompt = (
-        '你是一个专业的PPT制作助手。请为以下主题生成一个详细的PPT内容，包括封面、目录和至少5页内容。'
-        '封面至少应该有主标题和副标题，其余每页应该有详细的内容，包括文字描述和图片建议。'
-        '使用markdown格式输出，并在适当位置添加[IMAGE:图片描述]标记来表示图片位置和所需图片的描述。'
-        '图片可以插入在文字旁边或其他合适的位置。'
+        f'请为主题"{topic}"生成一个详细的PPT内容大纲，包括封面、目录和至少5个内容页面,以及至少需要2张图片。'
+        '使用以下格式和标识符：\n'
+        '1. 使用"[SLIDE]"作为每页幻灯片的开始标记。\n'
+        '2. 使用"[TITLE]"标记主标题。\n'
+        '3. 使用"[SUBTITLE]"标记副标题。\n'
+        '4. 使用"[CONTENT]"标记普通内容，每个要点使用"-"开始。\n'
+        '5. 使用"[IMAGE]"标记图片位置，后面跟图片描述。\n'
+        '例如：\n'
+        '[SLIDE]\n'
+        '[TITLE]PPT主题\n'
+        '[SUBTITLE]副标题\n'
+        '[CONTENT]\n'
+        '- 内容要点1\n'
+        '- 内容要点2\n'
+        '[IMAGE]这里是图片描述\n'
+        '[SLIDE]\n'
+        '... (下一页)'
     )
     if reference:
-        prompt += f'参考内容: {reference}'
+        prompt += f' 参考内容: {reference}'
 
     data = {
         'model': 'gpt-3.5-turbo',
         'messages': [
             {'role': 'system', 'content': prompt},
-            {'role': 'user', 'content': f'请为主题"{topic}"生成PPT内容。'}
+            {'role': 'user', 'content': '请生成PPT内容大纲。'}
         ]
     }
 
@@ -54,11 +69,7 @@ def generate_ppt():
     ppt = create_ppt(ppt_content)
     os.makedirs('static', exist_ok=True)
     ppt_path = os.path.join('static', 'generated_ppt.pptx')
-    try:
-        ppt.save(ppt_path)
-    except Exception as e:
-        print(f"Error saving PPT: {str(e)}")
-        return jsonify({"error": "Unable to save PPT file"}), 500
+    ppt.save(ppt_path)
 
     return jsonify({"content": ppt_content, "file_path": ppt_path})
 
@@ -68,12 +79,8 @@ def update_ppt():
     content = request.json['content']
     ppt = create_ppt(content)
     ppt_path = os.path.join('static', 'generated_ppt.pptx')
-    try:
-        ppt.save(ppt_path)
-        return jsonify({"success": True})
-    except Exception as e:
-        print(f"Error saving updated PPT: {str(e)}")
-        return jsonify({"success": False, "error": str(e)}), 500
+    ppt.save(ppt_path)
+    return jsonify({"success": True})
 
 
 @app.route('/download_ppt')
@@ -85,69 +92,120 @@ def download_ppt():
         return "PPT file not found", 404
 
 
-def set_text_frame_properties(text_frame):
-    text_frame.word_wrap = True  # 设置自动换行
-    for p in text_frame.paragraphs:
-        font = p.font
-        font.size = Pt(18)  # 设置字体大小
-        font.name = '微软雅黑'  # 设置字体
-        font.color.rgb = RGBColor(0, 0, 0)  # 设置字体颜色为黑色
+def add_image_placeholder(slide, description):
+    left = Inches(1)
+    top = Inches(3.5)
+    width = Inches(8)
+    height = Inches(3)
+
+    shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, left, top, width, height)
+    shape.fill.solid()
+    shape.fill.fore_color.rgb = RGBColor(240, 240, 240)
+    shape.line.color.rgb = RGBColor(200, 200, 200)
+
+    tf = shape.text_frame
+    tf.clear()
+    p = tf.add_paragraph()
+    p.text = f"[图片: {description}]"
+    p.alignment = PP_ALIGN.CENTER
+
+    return shape
 
 
+# def create_ppt(content):
+#     ppt = Presentation()
+#     slides = content.split('[SLIDE]')
+#
+#     for slide_content in slides[1:]:  # Skip the first empty split
+#         slide = ppt.slides.add_slide(ppt.slide_layouts[1])
+#         lines = slide_content.strip().split('\n')
+#
+#         for line in lines:
+#             if line.startswith('[TITLE]'):
+#                 title = slide.shapes.title
+#                 title.text = line.replace('[TITLE]', '').strip()
+#             elif line.startswith('[SUBTITLE]'):
+#                 subtitle = slide.placeholders[1]
+#                 subtitle.text = line.replace('[SUBTITLE]', '').strip()
+#             elif line.startswith('[CONTENT]'):
+#                 content = slide.placeholders[1]
+#                 content.text = ''
+#             elif line.startswith('-'):
+#                 p = content.text_frame.add_paragraph()
+#                 p.text = line.strip()
+#                 p.level = 0
+#             elif line.startswith('[IMAGE]'):
+#                 description = line.replace('[IMAGE]', '').strip()
+#                 add_image_placeholder(slide, description)
+#
+#         # Set font properties
+#         for shape in slide.shapes:
+#             if not shape.has_text_frame:
+#                 continue
+#             for paragraph in shape.text_frame.paragraphs:
+#                 for run in paragraph.runs:
+#                     run.font.name = '微软雅黑'
+#                     run.font.size = Pt(18)
+#                     run.font.color.rgb = RGBColor(0, 0, 0)
+#
+#     return ppt
 def create_ppt(content):
     ppt = Presentation()
-    ppt.slide_width = Inches(13.33)  # 设置宽度为16:9比例
-    ppt.slide_height = Inches(7.5)   # 设置高度为16:9比例
-    slides = content.split('## ')
-    for slide_content in slides:
-        if slide_content.strip():
-            slide = ppt.slides.add_slide(ppt.slide_layouts[1])
+    slides = content.split('[SLIDE]')
+
+    for i, slide_content in enumerate(slides[1:]):  # Skip the first empty split
+        if i == 0:  # Cover slide
+            slide = ppt.slides.add_slide(ppt.slide_layouts[0])  # Use the title slide layout
             title = slide.shapes.title
-            content_shape = slide.placeholders[1]
+            subtitle = slide.placeholders[1]
+        else:
+            slide = ppt.slides.add_slide(ppt.slide_layouts[1])  # Use the content slide layout
+            title = slide.shapes.title
+            content = slide.placeholders[1]
 
-            lines = slide_content.split('\n')
-            title.text = lines[0].strip()
+        lines = slide_content.strip().split('\n')
 
-            left = Inches(0.5)
-            top = Inches(1.5)
-            width = Inches(9)  # Adjust based on your slide size
-            height = Inches(0.5)
-
-            for line in lines[1:]:
-                if '[IMAGE:' in line:
-                    # Extract image description
-                    description = line[line.index(':') + 1:line.index(']')]
-                    img_left = Inches(1)
-                    img_top = top
-                    img_width = Inches(4)
-                    img_height = Inches(3)
-                    img_placeholder = slide.shapes.add_textbox(
-                        img_left, img_top, img_width, img_height)
-                    img_placeholder.fill.solid()
-                    img_placeholder.fill.fore_color.rgb = RGBColor(
-                        240, 240, 240)
-                    img_placeholder.line.color.rgb = RGBColor(200, 200, 200)
-
-                    tf = img_placeholder.text_frame
-                    p = tf.add_paragraph()
-                    p.text = f"[图片: {description}]"
-                    p.alignment = PP_ALIGN.CENTER
-
-                    top += img_height + Inches(0.5)
+        for line in lines:
+            if line.startswith('[TITLE]'):
+                title.text = line.replace('[TITLE]', '').strip()
+            elif line.startswith('[SUBTITLE]'):
+                if i == 0:
+                    subtitle.text = line.replace('[SUBTITLE]', '').strip()
                 else:
-                    txBox = slide.shapes.add_textbox(left, top, width, height)
-                    tf = txBox.text_frame
-                    p = tf.add_paragraph()
-                    p.text = line
-                    set_text_frame_properties(tf)  # 设置文本框属性，包括自动换行
-                    top += height + Inches(0.1)
+                    content.text += line.replace('[SUBTITLE]', '').strip() + '\n'
+            elif line.startswith('[CONTENT]'):
+                if i != 0:
+                    content.text = ''
+            elif line.startswith('-'):
+                if i != 0:
+                    p = content.text_frame.add_paragraph()
+                    p.text = line.strip()
+                    p.level = 0
+            elif line.startswith('[IMAGE]'):
+                description = line.replace('[IMAGE]', '').strip()
+                add_image_placeholder(slide, description)
 
-            # Remove default content shape
-            sp = content_shape._element
-            sp.getparent().remove(sp)
+        # Set font properties
+        for shape in slide.shapes:
+            if not shape.has_text_frame:
+                continue
+            for paragraph in shape.text_frame.paragraphs:
+                for run in paragraph.runs:
+                    if i == 0 and shape == title:  # Cover slide title
+                        run.font.name = '微软雅黑'
+                        run.font.size = Pt(44)
+                        run.font.bold = True
+                        run.font.color.rgb = RGBColor(0, 0, 0)
+                    elif i == 0 and shape == subtitle:  # Cover slide subtitle
+                        run.font.name = '微软雅黑'
+                        run.font.size = Pt(32)
+                        run.font.color.rgb = RGBColor(89, 89, 89)
+                    else:  # Other slides
+                        run.font.name = '微软雅黑'
+                        run.font.size = Pt(18)
+                        run.font.color.rgb = RGBColor(0, 0, 0)
 
     return ppt
-
 
 if __name__ == '__main__':
     app.run(debug=True)
