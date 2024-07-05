@@ -127,110 +127,125 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
-        let pptContent = '';
+    let pptContent = '';
 
-        async function generatePPT() {
-            document.getElementById('loader').style.display = 'block';
-            const topic = document.getElementById('topic').value;
-            const reference = document.getElementById('reference').value;
-            const response = await fetch('/generate_ppt', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ topic: topic, reference: reference }),
-            });
-            const data = await response.json();
-            pptContent = data.content;
-            displayPPT(pptContent);
-            document.getElementById('downloadBtn').style.display = 'block';
-            document.getElementById('loader').style.display = 'none';
-        }
+    async function generatePPT() {
+        document.getElementById('loader').style.display = 'block';
+        const topic = document.getElementById('topic').value;
+        const reference = document.getElementById('reference').value;
+        const response = await fetch('/generate_ppt', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ topic: topic, reference: reference }),
+        });
+        const data = await response.json();
+        pptContent = data.content;
+        displayPPT(pptContent);
+        document.getElementById('downloadBtn').style.display = 'block';
+        document.getElementById('loader').style.display = 'none';
+    }
 
-        function displayPPT(content) {
-            const preview = document.getElementById('preview');
-            preview.innerHTML = '';
-            const slides = content.split('## ');
-            slides.forEach((slide, index) => {
-                if (slide.trim()) {
-                    const slideDiv = document.createElement('div');
-                    slideDiv.className = 'slide-preview';
-                    const lines = slide.trim().split('\n');
-                    const title = index === 0 ? lines[0] : '## ' + lines[0];
-                    const body = lines.slice(1).join('\n');
-
-                    let processedBody = body.replace(/\[IMAGE:(.*?)\]/g, (match, description) => {
-                        return `<div class="image-placeholder">图片占位符: ${description}</div>`;
-                    });
-
-                    slideDiv.innerHTML = marked.parse(title) + marked.parse(processedBody);
-                    preview.appendChild(slideDiv);
-                }
-            });
-        }
-
-        function editPPT() {
-            const preview = document.getElementById('preview');
-            preview.contentEditable = true;
-            preview.focus();
-            document.getElementById('updateBtn').style.display = 'inline-block';
-            document.getElementById('styleControls').style.display = 'block';
-        }
-
-        function updateStyle() {
-            const preview = document.getElementById('preview');
-            const fontSize = document.getElementById('fontSize').value;
-            const lineHeight = document.getElementById('lineHeight').value;
-            const fontColor = document.getElementById('fontColor').value;
-
-            preview.style.fontSize = `${fontSize}px`;
-            preview.style.lineHeight = lineHeight;
-            preview.style.color = fontColor;
-
-            document.getElementById('fontColorPreview').style.backgroundColor = fontColor;
-        }
-
-        async function updatePPT() {
-            const preview = document.getElementById('preview');
-            const slides = Array.from(preview.children);
-            const updatedContent = slides.map(slide => {
-                const title = slide.querySelector('h1, h2');
-                const content = Array.from(slide.children).filter(el => el !== title);
-                let slideContent = `## ${title.innerText}\n`;
-                content.forEach(el => {
-                    if (el.classList.contains('image-placeholder')) {
-                        slideContent += `[IMAGE:${el.innerText.replace('图片占位符: ', '')}]\n`;
-                    } else {
-                        slideContent += el.innerText + '\n';
+    function displayPPT(content) {
+        const preview = document.getElementById('preview');
+        preview.innerHTML = '';
+        const slides = content.split('[SLIDE]');
+        slides.forEach((slide, index) => {
+            if (slide.trim()) {
+                const slideDiv = document.createElement('div');
+                slideDiv.className = 'slide-preview';
+                const lines = slide.trim().split('\n');
+                let slideContent = '';
+                lines.forEach(line => {
+                    if (line.startsWith('[TITLE]')) {
+                        slideContent += `<h2>${line.replace('[TITLE]', '').trim()}</h2>`;
+                    } else if (line.startsWith('[SUBTITLE]')) {
+                        slideContent += `<h3>${line.replace('[SUBTITLE]', '').trim()}</h3>`;
+                    } else if (line.startsWith('[CONTENT]')) {
+                        slideContent += '<ul>';
+                    } else if (line.startsWith('-')) {
+                        slideContent += `<li>${line.trim().substring(1)}</li>`;
+                    } else if (line.startsWith('[IMAGE]')) {
+                        slideContent += `<div class="image-placeholder">图片占位符: ${line.replace('[IMAGE]', '').trim()}</div>`;
+                    } else if (line === '') {
+                        slideContent += '</ul>';
                     }
                 });
-                return slideContent;
-            }).join('\n\n');
-
-            const response = await fetch('/update_ppt', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ content: updatedContent }),
-            });
-            const data = await response.json();
-            if (data.success) {
-                alert('PPT已更新');
-                preview.contentEditable = false;
-                document.getElementById('updateBtn').style.display = 'none';
-                document.getElementById('styleControls').style.display = 'none';
-                displayPPT(updatedContent);
-            } else {
-                alert('更新PPT失败');
+                slideDiv.innerHTML = slideContent;
+                preview.appendChild(slideDiv);
             }
-        }
+        });
+    }
 
-        function downloadPPT() {
-            window.location.href = '/download_ppt';
+    function editPPT() {
+        const preview = document.getElementById('preview');
+        preview.contentEditable = true;
+        preview.focus();
+        document.getElementById('updateBtn').style.display = 'inline-block';
+        document.getElementById('styleControls').style.display = 'block';
+    }
+
+    function updateStyle() {
+        const preview = document.getElementById('preview');
+        const fontSize = document.getElementById('fontSize').value;
+        const lineHeight = document.getElementById('lineHeight').value;
+        const fontColor = document.getElementById('fontColor').value;
+
+        preview.style.fontSize = `${fontSize}px`;
+        preview.style.lineHeight = lineHeight;
+        preview.style.color = fontColor;
+
+        document.getElementById('fontColorPreview').style.backgroundColor = fontColor;
+    }
+
+    async function updatePPT() {
+        const preview = document.getElementById('preview');
+        const slides = Array.from(preview.children);
+        const updatedContent = slides.map(slide => {
+            let slideContent = '[SLIDE]\n';
+            const elements = slide.children;
+            for (let el of elements) {
+                if (el.tagName === 'H2') {
+                    slideContent += `[TITLE]${el.innerText}\n`;
+                } else if (el.tagName === 'H3') {
+                    slideContent += `[SUBTITLE]${el.innerText}\n`;
+                } else if (el.tagName === 'UL') {
+                    slideContent += '[CONTENT]\n';
+                    const items = el.getElementsByTagName('LI');
+                    for (let item of items) {
+                        slideContent += `- ${item.innerText}\n`;
+                    }
+                } else if (el.classList.contains('image-placeholder')) {
+                    slideContent += `[IMAGE]${el.innerText.replace('图片占位符: ', '')}\n`;
+                }
+            }
+            return slideContent;
+        }).join('\n');
+
+        const response = await fetch('/update_ppt', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ content: updatedContent }),
+        });
+        const data = await response.json();
+        if (data.success) {
+            alert('PPT已更新');
+            preview.contentEditable = false;
+            document.getElementById('updateBtn').style.display = 'none';
+            document.getElementById('styleControls').style.display = 'none';
+            displayPPT(updatedContent);
+        } else {
+            alert('更新PPT失败');
         }
-    </script>
+    }
+
+    function downloadPPT() {
+        window.location.href = '/download_ppt';
+    }
+</script>
 </body>
 </html>
