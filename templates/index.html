@@ -41,7 +41,7 @@
             padding: 20px;
             margin-bottom: 20px;
         }
-        .image-placeholder {
+        .image-placeholder, .mindmap-placeholder {
             background-color: #e9ecef;
             border: 2px dashed #ced4da;
             border-radius: 5px;
@@ -143,12 +143,12 @@
         });
         const data = await response.json();
         pptContent = data.content;
-        displayPPT(pptContent);
+        displayPPT(pptContent, data.mindmaps);
         document.getElementById('downloadBtn').style.display = 'block';
         document.getElementById('loader').style.display = 'none';
     }
 
-    function displayPPT(content) {
+    function displayPPT(content, mindmaps) {
     const preview = document.getElementById('preview');
     preview.innerHTML = '';
     const slides = content.split('[SLIDE]');
@@ -176,6 +176,15 @@
                         inContentList = false;
                     }
                     slideContent += `<div class="image-placeholder">图片占位符: ${line.replace('[IMAGE]', '').trim()}</div>`;
+                } else if (line.startsWith('[MINDMAP]')) {
+                    if (inContentList) {
+                        slideContent += '</ul>';
+                        inContentList = false;
+                    }
+                    const mindmapContent = line.replace('[MINDMAP]', '').trim().split('|');
+                    if (mindmapContent.length >= 2) {
+                        slideContent += `<div class="mindmap-placeholder">思维导图: ${mindmapContent[0]} | ${mindmapContent[1]}</div>`;
+                    }
                 } else if (line.trim() === '' && inContentList) {
                     slideContent += '</ul>';
                     inContentList = false;
@@ -188,10 +197,26 @@
 
             slideDiv.innerHTML = slideContent;
             preview.appendChild(slideDiv);
+
+            // 添加实际生成的思维导图
+            const mindmapLine = slide.split('\n').find(line => line.startsWith('[MINDMAP]'));
+            if (mindmapLine) {
+                const mindmapTitle = mindmapLine.replace('[MINDMAP]', '').trim().split('|')[0];
+                const mindmap = mindmaps.find(m => m.title === mindmapTitle);
+
+                if (mindmap) {
+                    const mindmapSlideDiv = document.createElement('div');
+                    mindmapSlideDiv.className = 'slide-preview';
+                    mindmapSlideDiv.innerHTML = `
+                        <h2>思维导图: ${mindmapTitle}</h2>
+                        <img src="${mindmap.url}" alt="思维导图" style="width: 100%; max-height: 400px; object-fit: contain;">
+                    `;
+                    preview.appendChild(mindmapSlideDiv);
+                }
+            }
         }
     });
 }
-
     function editPPT() {
         const preview = document.getElementById('preview');
         preview.contentEditable = true;
@@ -230,6 +255,10 @@
             if (imagePlaceholder) {
                 slideContent += `[IMAGE]${imagePlaceholder.innerText.replace('图片占位符: ', '')}\n`;
             }
+            const mindmapPlaceholder = slide.querySelector('.mindmap-placeholder');
+            if (mindmapPlaceholder) {
+                slideContent += `[MINDMAP]${mindmapPlaceholder.innerText.replace('思维导图: ', '')}\n`;
+            }
         } else {
             // 处理其他幻灯片
             for (let el of elements) {
@@ -245,6 +274,8 @@
                     }
                 } else if (el.classList.contains('image-placeholder')) {
                     slideContent += `[IMAGE]${el.innerText.replace('图片占位符: ', '')}\n`;
+                } else if (el.classList.contains('mindmap-placeholder')) {
+                    slideContent += `[MINDMAP]${el.innerText.replace('思维导图: ', '')}\n`;
                 }
             }
         }
@@ -265,7 +296,7 @@
         preview.contentEditable = false;
         document.getElementById('updateBtn').style.display = 'none';
         document.getElementById('styleControls').style.display = 'none';
-        displayPPT(updatedContent);
+        displayPPT(updatedContent, data.mindmaps);  // 使用服务器返回的新思维导图信息
     } else {
         alert('更新PPT失败');
     }
@@ -274,6 +305,6 @@
     function downloadPPT() {
         window.location.href = '/download_ppt';
     }
-</script>
+    </script>
 </body>
 </html>
