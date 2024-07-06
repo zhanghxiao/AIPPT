@@ -33,7 +33,7 @@ def generate_ppt():
         'Authorization': f'Bearer {OPENAI_API_KEY}'
     }
     prompt = (
-        f'请为主题"{topic}"生成一个详细的PPT内容大纲，包括封面、目录和至少5个内容页面,以及至少需要2张图片。'
+        f'请为主题"{topic}"生成一个详细的PPT内容，包括封面、目录和5个以上的内容页面,以及需要2张以上图片，封面可以不添加图片，目录必须有目录。内容页面必须有相关的内容'
         '使用以下格式和标识符：\n'
         '1. 使用"[SLIDE]"作为每页幻灯片的开始标记。\n'
         '2. 使用"[TITLE]"标记主标题。\n'
@@ -52,13 +52,13 @@ def generate_ppt():
         '... (下一页)'
     )
     if reference:
-        prompt += f' 参考内容: {reference}'
+        prompt += f' 参考内容或者修改意见: {reference}'
 
     data = {
         'model': 'gpt-3.5-turbo',
         'messages': [
             {'role': 'system', 'content': prompt},
-            {'role': 'user', 'content': '请生成PPT内容大纲。'}
+            {'role': 'user', 'content': '请生成完整的PPT内容。'}
         ]
     }
 
@@ -93,10 +93,14 @@ def download_ppt():
 
 
 def add_image_placeholder(slide, description):
+    # left = Inches(1)
+    # top = Inches(3.5)
+    # width = Inches(8)
+    # height = Inches(3)
     left = Inches(1)
-    top = Inches(3.5)
+    top = Inches(4)  # 将图片位置向下移动
     width = Inches(8)
-    height = Inches(3)
+    height = Inches(2.5)  # 减小图片高度
 
     shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, left, top, width, height)
     shape.fill.solid()
@@ -162,6 +166,7 @@ def create_ppt(content):
             slide = ppt.slides.add_slide(ppt.slide_layouts[1])  # Use the content slide layout
             title = slide.shapes.title
             content = slide.placeholders[1]
+
 
         lines = slide_content.strip().split('\n')
 
