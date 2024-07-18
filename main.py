@@ -58,7 +58,7 @@ def generate_ppt():
         prompt += f' 参考内容或者修改意见: {reference}'
 
     data = {
-        'model': 'gpt-3.5-turbo',
+        'model': 'claude-3-5-sonnet',
         'messages': [
             {'role': 'system', 'content': prompt},
             {'role': 'user', 'content': '请生成完整的PPT内容。'}
